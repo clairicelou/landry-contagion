@@ -68,4 +68,4 @@ kernel = node -> 0.5
 # Print the result
 # println(node_states)
 
-node_states = simulate_contagion(g, kernel, node_states, 10)
+# node_states = simulate_contagion(g, kernel, node_states, 10)
