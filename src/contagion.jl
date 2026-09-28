@@ -1,4 +1,4 @@
-    using Graphs
+using Graphs
 
 # graph with 5 nodes connected in a path
 # The graph looks like: 1 -- 2 -- 3 -- 4 -- 5
