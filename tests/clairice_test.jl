@@ -15,7 +15,7 @@ include("../src/contagion.jl")
     graph = path_graph(3)
 
     node_states = [1, 0, 0]  # Node 1 is infected, nodes 2 and 3 are not
-    kernel = node -> 0.0  # 0% probability of infection
+    kernel = count -> 0.0  # 0% probability of infection
 
     result = contagion_one_step(graph, kernel, node_states) # Call the function
     @test result == [1, 0, 0]  # Expect no change since probability is 0/Julia checks whether the result is exactly what we expected.
@@ -27,7 +27,7 @@ end
     graph = path_graph(3)
 
     node_states = [1, 0, 0]  # Node 1 is infected, nodes 2 and 3 are not
-    kernel = node -> 1.0  # 100% probability of infection
+    kernel = count -> count >= 1 ? 1.0 : 0.0  # 100% probability if there is at least one infected neighbor
 
     result = contagion_one_step(graph, kernel, node_states) # Call the function
     @test result == [1, 1, 0]  # Expect node 2 to be infected
@@ -37,7 +37,7 @@ end
 @testset "simulate_contagion" begin
     graph = path_graph(3)
     node_states = [1, 0, 0]  # Node 1 is infected, nodes 2 and 3 are not
-    kernel = node -> 1.0  # 100% probability of infection
+    kernel = count -> count >= 1 ? 1.0 : 0.0  # 100% probability if there is at least one infected neighbor
     result = simulate_contagion(graph, kernel, node_states, 2) # Simulate for 2 steps
     @test result == [1, 1, 1]  # Expect all nodes to be infected after 2 steps
 end
@@ -46,9 +46,23 @@ end
 @testset "infected nodes stay infected" begin
     graph = path_graph(3)
     node_states = [1, 1, 0]  # Nodes 1 and 2 are infected, node 3 is not
-    kernel = node -> 0.0  # 0% probability of infection
+    kernel = count -> 0.0  # 0% probability of infection
     result = contagion_one_step(graph, kernel, node_states)
     @test result == [1, 1, 0]  # Expect no change after 1 step
+end
+
+# Fifth test: kernel test to check if the kernel function is applied correctly
+@testset "kernel" begin
+    beta = 0.2 # β represents the probability of infection when a node has 1 infected neighbor.
+    kernel = count -> 1 - (1 - beta)^count # defines the kernel formula
+    # count = number of infected neighbors
+    # beta = 0.2
+    # the kernel returns the probability of infection
+
+    # plug different counts into it
+    @test kernel(0) == 0 # 0 infected neighbors
+    @test kernel(1) ≈ beta # 1 infected neighbor
+    @test kernel(2) ≈ 2 * beta - beta^2
 end
 
 
@@ -84,4 +98,26 @@ end
 
     # Check that the number of infected nodes did not decrease
     sum(result) >= sum(states)
+end
+
+# 3rd test: Check if the contagion process works on a complete graph
+@testset "number of infected nodes never decreases on complete graph" begin
+    graph = complete_graph(5)
+    node_states = [1, 0, 1, 0, 0] # initially 2 infected nodes
+    kernel = count -> 0.5 # gives every uninfected node a 50% infection probability regardless of how many infected neighbors it has.
+
+    result = contagion_one_step(graph, kernel, node_states)
+
+    @test sum(result) >= sum(node_states) # The number of infected nodes after one step should be at least as large as the number before
+end
+
+# 4th test: Check if the contagion process works on a ring graph
+@testset "number of infected nodes never decreases on ring graph" begin
+    graph = cycle_graph(5)
+    node_states = [1, 0, 1, 0, 0]
+    kernel = count -> 0.5
+
+    result = contagion_one_step(graph, kernel, node_states)
+
+    @test sum(result) >= sum(node_states)
 end
