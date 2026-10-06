@@ -9,20 +9,25 @@ function contagion_one_step(graph, kernel, node_states)
     # Check each node in the graph
     for node in vertices(graph)
 
-        # Check if the node is infected
-        if node_states[node] == 1
+        # Check if the node is not infected
+        if node_states[node] == 0
 
-            # Check each neighbor of the infected node
+            # Count how many neighbors are infected
+            infected_neighbors = 0
+
+            # Check each neighbor of the current node
             for neighbor in neighbors(graph, node)
-
-                # If the neighbor is not infected, infect it
-                if node_states[neighbor] == 0
-                    probability = kernel(neighbor)
-                    
-                    if rand() < probability
-                        new_states[neighbor] = 1
-                    end 
+                if node_states[neighbor] == 1
+                    infected_neighbors += 1
                 end
+            end
+
+            # Apply the kernel based on the number of infected neighbors
+            probability = kernel(infected_neighbors)
+
+            # Infect the node based on the probability
+            if rand() < probability
+                new_states[node] = 1
             end
         end
     end
@@ -30,6 +35,23 @@ function contagion_one_step(graph, kernel, node_states)
     # Return the updated states
     return new_states
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 function simulate_contagion(graph, kernel, node_states, steps)
