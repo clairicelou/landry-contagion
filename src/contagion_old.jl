@@ -17,7 +17,7 @@ node_states[seed_node] = 1
 
 
 """
-    step_contagion(kernel, graph, node_states)
+step_contagion(kernel, graph, node_states)
 
 does ONE time step of the contagion spreading. loops over every node,
 if it's infected, tries to infect each susceptible neighbor based on
