@@ -23,6 +23,7 @@ Manifest.toml
 .DS_Store
 .vscode/
 *.swp
+simulation.jl
 
 # Results/outputs you don't want tracked (adjust as needed)
 results/*
