@@ -82,6 +82,72 @@ end
 
 
 
+# Check basic requirements for directed degree sequences
+function valid_degree_totals(kin, kout)
+    n = length(kin) # Gets the number of nodes.
+
+    # Each node needs an in-degree and out-degree
+    if length(kout) != n # Makes sure every node has both an incoming and outgoing degree
+        return false
+    end
+
+    # Degrees must be between 0 and n-1
+    if any(k -> k < 0 || k >= n, kin) || # Checks whether any degree is negative or too large
+       any(k -> k < 0 || k >= n, kout)
+        return false
+    end
+
+    # Total incoming edges must equal total outgoing edges
+    return sum(kin) == sum(kout) 
+end
+
+
+# Check whether the degree sequences can form a directed graph
+function is_graphical(kin, kout)
+    if !valid_degree_totals(kin, kout)
+        return false
+    end
+
+    n = length(kin)
+    graph = SimpleDiGraph(n)
+
+    return can_complete(graph, copy(kin), copy(kout))
+end
+
+# Try all possible valid edges until the degrees are filled
+function can_complete(graph, kin, kout)
+    if all(kin .== 0) && all(kout .== 0)
+        return true
+    end
+    # Try each possible source and target
+    for source in vertices(graph)
+        for target in vertices(graph)
+            if source != target &&
+               kout[source] > 0 &&
+               kin[target] > 0 &&
+               !has_edge(graph, source, target)
+
+                add_edge!(graph, source, target)
+                kout[source] -= 1
+                kin[target] -= 1
+
+                if can_complete(graph, kin, kout)
+                    return true
+                end
+
+                rem_edge!(graph, source, target)
+                kout[source] += 1
+                kin[target] += 1
+            end
+        end
+    end
+
+    return false
+end
+
+
+
+
 # Check whether any valid directed edges remain
 function has_valid_edges(graph, kin, kout)
 
@@ -103,21 +169,20 @@ end
 
 
 
-# test if it works
+# Generate a static directed network
+function generate_network(n)
 
-# Create a graph with 5 nodes
-graph = create_static_network(5)
-# directed network with 5 nodes and no edges
-println(nv(graph)) # nv(): number of vertices
-println(ne(graph)) # number of edges
+    # Create an empty directed graph
+    graph = create_static_network(n)
 
-# Sample incoming and outgoing degrees
-kin = sample_power_law(5, 2.5, 4) # Generate five random in-degrees
-kout = sample_power_law(5, 2.5, 4) # Generate five random out-degrees
+# randomly generate the in-degree and out-degree for every node in my directed network
+kin = sample_power_law(n, 2.5, n - 1)
+kout = sample_power_law(n, 2.5, n - 1)
 
-# Keep sampling kout until the total matches kin
-while sum(kin) != sum(kout)
-    global kout = sample_power_law(5, 2.5, 4)
+# Keep sampling until the degree sequences can form a valid network
+while !is_graphical(kin, kout) # Keeps looping while the sampled degrees cannot form a valid directed network.
+    kin = sample_power_law(n, 2.5, n - 1) # Samples a new set of incoming degrees.
+    kout = sample_power_law(n, 2.5, n - 1) # Samples a new set of outgoing degrees.
 end
 
 # Print the degree sequences
@@ -138,11 +203,16 @@ end
 
 
 
-# Keep adding edges while valid connections remain
-while has_valid_edges(graph, kin, kout)
-# Checks whether at least one valid connection is still possible. If so, the loop continues.
-    global success = add_random_edge!(graph, kin, kout) # Attempts to create another random edge using the function you already wrote.
+# Find a complete set of edges using backtracking
+success = can_complete(graph, kin, kout)
+
+# Check whether all requested degrees were filled
+if all(kin .== 0) && all(kout .== 0)
+    println("Success! All degrees were filled.")
+else
+    println("Network incomplete! Some degrees remain unfilled.")
 end
+
 
 # Print the final results
 println("Number of edges: ", ne(graph))
@@ -156,3 +226,31 @@ println("Valid edges remaining: ", has_valid_edges(graph, kin, kout))
 # Check the actual in-degrees and out-degrees of the finished graph
 println("Actual in-degrees: ", [indegree(graph, i) for i in vertices(graph)])
 println("Actual out-degrees: ", [outdegree(graph, i) for i in vertices(graph)])
+
+
+    # Only return the graph if all degrees were filled
+    if all(kin .== 0) && all(kout .== 0) # Checks that every requested incoming and outgoing edge was successfully added.
+        return graph # Returns the completed network if all degrees were filled.
+    else # Handles the situation where some degrees remain unfilled.
+        return nothing # Indicates that the attempt failed instead of returning an incomplete network.
+    end
+end # - The first end closes the if statement, the second closes the function.
+
+
+# Try generating a complete network up to 10 times
+graph = nothing
+
+for attempt in 1:10
+    println("Network attempt: ", attempt)
+    global graph = generate_network(5)
+
+    if graph !== nothing
+        break
+    end
+end
+
+if graph === nothing
+    println("Failed to generate a complete network after 10 attempts.")
+else
+    println("Successfully generated a complete network!")
+end
