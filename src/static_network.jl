@@ -249,8 +249,21 @@ for attempt in 1:10
     end
 end
 
+
+# to save the network
 if graph === nothing
     println("Failed to generate a complete network after 10 attempts.")
 else
     println("Successfully generated a complete network!")
+
+    # Save the network as an edge list
+    open("network_edges.csv", "w") do file # Creates a CSV file, or overwrites it if it already exists
+        println(file, "source,target") # Writes the column names.
+
+        for edge in edges(graph) # Goes through every directed edge in my graph
+            println(file, "$(src(edge)),$(dst(edge))") # Gets the source node and Gets the target node
+        end
+    end
+
+    println("Saved network to network_edges.csv") # Saves each edge as a row.
 end
