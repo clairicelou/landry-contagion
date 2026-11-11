@@ -28,3 +28,8 @@ simulation.jl
 # Results/outputs you don't want tracked (adjust as needed)
 results/*
 !results/README.md
+
+# Snakemake bookkeeping and stray outputs
+.snakemake/
+network_edges.csv
+test/SuppositionDB/

@@ -1,0 +1,12 @@
+# Network
+n_nodes: 1000
+alpha: 2.5
+
+# Contagion (placeholder values)
+kernel: simple
+p: 0.1
+threshold: 2
+steps: 50
+
+# One network and one simulation per seed
+seeds: [1, 2, 3]

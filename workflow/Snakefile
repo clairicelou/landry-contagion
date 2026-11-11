@@ -1,0 +1,52 @@
+configfile: "config/config.yaml"
+
+
+rule all:
+    input:
+        "results/combined_stats.csv",
+
+
+# Sample a directed power-law network and save it as an edge list
+rule sample_network:
+    output:
+        "results/networks/net_{seed}.csv",
+    params:
+        n=config["n_nodes"],
+        alpha=config["alpha"],
+    shell:
+        "julia --project=. src/static_network.jl {params.n} {params.alpha} {wildcards.seed} {output}"
+
+
+# Run one contagion simulation and save the cascade tree of first infections
+rule run_simulation:
+    input:
+        "results/networks/net_{seed}.csv",
+    output:
+        "results/cascades/cascade_{seed}.csv",
+    params:
+        kernel=config["kernel"],
+        p=config["p"],
+        threshold=config["threshold"],
+        steps=config["steps"],
+    shell:
+        "julia --project=. src/run_simulation.jl {input} {params.kernel} {params.p} {params.threshold} {params.steps} {wildcards.seed} {output}"
+
+
+# Cascade size, depth and structural virality for one simulation
+rule compute_statistics:
+    input:
+        "results/cascades/cascade_{seed}.csv",
+    output:
+        "results/stats/stats_{seed}.csv",
+    shell:
+        "julia --project=. src/compute_statistics.jl {input} {wildcards.seed} {output}"
+
+
+# Combine the statistics from all simulations
+rule combine_results:
+    input:
+        expand("results/stats/stats_{seed}.csv", seed=config["seeds"]),
+    output:
+        "results/combined_stats.csv",
+    shell:
+        "julia --project=. src/combine_results.jl {output} {input}"

@@ -41,47 +41,6 @@ function sample_power_law(n, alpha, max_degree)
 end
 
 
-# Attempt to add one random directed edge
-function add_random_edge!(graph, kin, kout)
-
-    # Randomly select two different nodes
-    i, j = randperm(nv(graph))[1:2]
-
-    # Randomly decide which node is the source and target
-    if rand() < 0.5 # Generates a random number between 0 and 1. There is a 50% chance that the condition is true.
-        source = i
-        target = j # If the condition is true, node i sends the edge to node j.
-    else # If the condition is false, we reverse the direction.
-        source = j
-        target = i  # Now node j sends the edge to node i.
-    end
-
-    # Print the selected source and target
-    println("Source: ", source)
-    println("Target: ", target)
-
-    # Check if the source can send, the target can receive, and the edge does not already exist
-    if kout[source] > 0 && kin[target] > 0 && !has_edge(graph, source, target)
-
-        # Add a directed edge from source to target
-        add_edge!(graph, source, target)
-        println("Edge added!")
-
-        # Decrease the remaining degrees after adding the edge
-        kout[source] -= 1
-        # This decreases the target's remaining in-degree by 1 because it just received an edge.
-        kin[target] -= 1
-
-        return true
-    else
-        println("Invalid connection!")
-    end
-
-    return false
-end
-
-
-
 # Check basic requirements for directed degree sequences
 function valid_degree_totals(kin, kout)
     n = length(kin) # Gets the number of nodes.
@@ -102,168 +61,107 @@ function valid_degree_totals(kin, kout)
 end
 
 
-# Check whether the degree sequences can form a directed graph
-function is_graphical(kin, kout)
-    if !valid_degree_totals(kin, kout)
-        return false
-    end
-
+# Randomly pair outgoing and incoming stubs (configuration model)
+# Self-loops and duplicate edges are fixed by swapping targets, which keeps the degrees the same
+function configuration_model(kin, kout; max_swaps=100 * sum(kout))
     n = length(kin)
-    graph = SimpleDiGraph(n)
+    sources = reduce(vcat, [fill(i, kout[i]) for i in 1:n])
+    targets = shuffle!(reduce(vcat, [fill(i, kin[i]) for i in 1:n]))
+    m = length(sources)
 
-    return can_complete(graph, copy(kin), copy(kout))
-end
-
-# Try all possible valid edges until the degrees are filled
-function can_complete(graph, kin, kout)
-    if all(kin .== 0) && all(kout .== 0)
-        return true
+    # Count how many times each edge appears
+    counts = Dict{Tuple{Int,Int},Int}()
+    for e in 1:m
+        counts[(sources[e], targets[e])] = get(counts, (sources[e], targets[e]), 0) + 1
     end
-    # Try each possible source and target
-    for source in vertices(graph)
-        for target in vertices(graph)
-            if source != target &&
-               kout[source] > 0 &&
-               kin[target] > 0 &&
-               !has_edge(graph, source, target)
+    is_bad(e) = sources[e] == targets[e] || counts[(sources[e], targets[e])] > 1
+    is_free(s, t) = s != t && get(counts, (s, t), 0) == 0
 
-                add_edge!(graph, source, target)
-                kout[source] -= 1
-                kin[target] -= 1
+    swaps = 0
+    for e in 1:m
+        while is_bad(e)
+            swaps += 1
+            swaps > max_swaps && return nothing
 
-                if can_complete(graph, kin, kout)
-                    return true
-                end
+            f = rand(1:m)
+            s1, t1, s2, t2 = sources[e], targets[e], sources[f], targets[f]
+            # Swap targets only if both new edges are valid
+            (is_free(s1, t2) && is_free(s2, t1) && (s1, t2) != (s2, t1)) || continue
 
-                rem_edge!(graph, source, target)
-                kout[source] += 1
-                kin[target] += 1
-            end
+            counts[(s1, t1)] -= 1
+            counts[(s2, t2)] -= 1
+            targets[e], targets[f] = t2, t1
+            counts[(s1, t2)] = 1
+            counts[(s2, t1)] = 1
         end
     end
 
-    return false
-end
-
-
-
-
-# Check whether any valid directed edges remain
-function has_valid_edges(graph, kin, kout)
-
-    # Check every possible source node
-    for source in vertices(graph)
-
-        # Check every possible target node
-        for target in vertices(graph)
-
-            # Check if the nodes can still be connected
-            if source != target && kout[source] > 0 && kin[target] > 0 && !has_edge(graph, source, target)
-                return true
-            end
-        end
+    graph = create_static_network(n)
+    for e in 1:m
+        add_edge!(graph, sources[e], targets[e])
     end
-
-    return false
+    return graph
 end
-
 
 
 # Generate a static directed network
-function generate_network(n)
+function generate_network(n, alpha=2.5; verbose=true, max_resamples=10_000)
 
-    # Create an empty directed graph
-    graph = create_static_network(n)
+    for resample in 1:max_resamples
 
-# randomly generate the in-degree and out-degree for every node in my directed network
-kin = sample_power_law(n, 2.5, n - 1)
-kout = sample_power_law(n, 2.5, n - 1)
+        # randomly generate the in-degree and out-degree for every node in my directed network
+        kin = sample_power_law(n, alpha, n - 1)
+        kout = sample_power_law(n, alpha, n - 1)
 
-# Keep sampling until the degree sequences can form a valid network
-while !is_graphical(kin, kout) # Keeps looping while the sampled degrees cannot form a valid directed network.
-    kin = sample_power_law(n, 2.5, n - 1) # Samples a new set of incoming degrees.
-    kout = sample_power_law(n, 2.5, n - 1) # Samples a new set of outgoing degrees.
-end
+        # Resample if total in-degree and out-degree don't match
+        valid_degree_totals(kin, kout) || continue
 
-# Print the degree sequences
-println("In-degrees: ", kin)
-println("Out-degrees: ", kout)
+        # Connect the stubs, resample if it fails
+        graph = configuration_model(kin, kout)
+        graph === nothing && continue
 
-# Check the total number of incoming and outgoing edges
-println("Total in-degree: ", sum(kin))
-println("Total out-degree: ", sum(kout))
+        if verbose
+            println("Degree resamples needed: ", resample)
+            println("In-degrees: ", kin)
+            println("Out-degrees: ", kout)
+            println("Number of edges: ", ne(graph))
+        end
 
-# Check if the total in-degree equals the total out-degree
-if sum(kin) == sum(kout) # adds all the incoming edges = adds all the outgoing edges
-    println("Degree totals match!")
-else
-    println("Degree totals do not match!")
-end
-
-
-
-
-# Find a complete set of edges using backtracking
-success = can_complete(graph, kin, kout)
-
-# Check whether all requested degrees were filled
-if all(kin .== 0) && all(kout .== 0)
-    println("Success! All degrees were filled.")
-else
-    println("Network incomplete! Some degrees remain unfilled.")
-end
-
-
-# Print the final results
-println("Number of edges: ", ne(graph))
-println("Remaining in-degrees: ", kin)
-println("Remaining out-degrees: ", kout)
-println("Valid edges remaining: ", has_valid_edges(graph, kin, kout))
-# Show how many edges were created and whether any degrees remain unfilled.
-
-
-
-# Check the actual in-degrees and out-degrees of the finished graph
-println("Actual in-degrees: ", [indegree(graph, i) for i in vertices(graph)])
-println("Actual out-degrees: ", [outdegree(graph, i) for i in vertices(graph)])
-
-
-    # Only return the graph if all degrees were filled
-    if all(kin .== 0) && all(kout .== 0) # Checks that every requested incoming and outgoing edge was successfully added.
-        return graph # Returns the completed network if all degrees were filled.
-    else # Handles the situation where some degrees remain unfilled.
-        return nothing # Indicates that the attempt failed instead of returning an incomplete network.
+        return graph
     end
-end # - The first end closes the if statement, the second closes the function.
 
-
-# Try generating a complete network up to 10 times
-graph = nothing
-
-for attempt in 1:10
-    println("Network attempt: ", attempt)
-    global graph = generate_network(5)
-
-    if graph !== nothing
-        break
-    end
+    error("Could not generate a network with n=$n, alpha=$alpha after $max_resamples degree samples.")
 end
 
 
-# to save the network
-if graph === nothing
-    println("Failed to generate a complete network after 10 attempts.")
-else
-    println("Successfully generated a complete network!")
-
-    # Save the network as an edge list
-    open("network_edges.csv", "w") do file # Creates a CSV file, or overwrites it if it already exists
-        println(file, "source,target") # Writes the column names.
-
-        for edge in edges(graph) # Goes through every directed edge in my graph
-            println(file, "$(src(edge)),$(dst(edge))") # Gets the source node and Gets the target node
+# Save the network as an edge list with a source,target header
+function save_edgelist(graph, path)
+    mkpath(dirname(abspath(path)))
+    open(path, "w") do file
+        println(file, "source,target")
+        for edge in edges(graph)
+            println(file, "$(src(edge)),$(dst(edge))")
         end
     end
+end
 
-    println("Saved network to network_edges.csv") # Saves each edge as a row.
+
+# Usage: julia --project=. src/static_network.jl n alpha seed output_path
+# With no arguments it uses n=5, alpha=2.5, seed=42 and writes network_edges.csv
+function main(args)
+    n = length(args) >= 1 ? parse(Int, args[1]) : 5
+    alpha = length(args) >= 2 ? parse(Float64, args[2]) : 2.5
+    seed = length(args) >= 3 ? parse(Int, args[3]) : 42
+    output = length(args) >= 4 ? args[4] : "network_edges.csv"
+
+    # Seed the global random number generator so the same seed gives the same network
+    Random.seed!(seed)
+
+    graph = generate_network(n, alpha; verbose=isempty(args))
+    save_edgelist(graph, output)
+end
+
+# Only run when this file is run directly, not when it is included
+if abspath(PROGRAM_FILE) == @__FILE__
+    main(ARGS)
 end
